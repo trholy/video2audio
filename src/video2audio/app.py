@@ -1,9 +1,9 @@
 import os
+import re
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from pathlib import Path
 from video2audio.transcoder import Video2Audio
 import threading
-import shutil
 
 UPLOAD_FOLDER = "uploads"
 PROCESSING_FOLDER = "processing"
@@ -22,14 +22,29 @@ processed_list = []
 
 transcoder = Video2Audio(ffmpeg_bin="ffmpeg", ffprobe_bin="ffprobe")
 
-
-# Add these globals
+# Global transcoding settings
 settings = {
     "codec": "mp3",
     "bitrate": None,
     "samplerate": None,
     "channels": None,
 }
+
+# 🔹 Filename cleaning utility
+def clean_filename(filename: str) -> str:
+    """
+    Clean filename to make it safe for saving, processing, and downloading.
+    - Keeps alphanumeric, dot, dash, underscore
+    - Replaces spaces and invalid chars with '_'
+    """
+    name, ext = os.path.splitext(filename)
+    # Replace invalid chars with underscore
+    name = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+    # Collapse multiple underscores
+    name = re.sub(r"_+", "_", name).strip("_")
+    if not name:
+        name = "file"
+    return f"{name}{ext.lower()}"
 
 
 @app.route('/')
@@ -44,11 +59,12 @@ def upload():
     saved_files = []
     for f in files:
         if f.filename:
-            filepath = os.path.join(UPLOAD_FOLDER, f.filename)
+            safe_name = clean_filename(f.filename)
+            filepath = os.path.join(UPLOAD_FOLDER, safe_name)
             f.save(filepath)
-            if f.filename not in upload_list:
-                upload_list.append(f.filename)
-            saved_files.append(f.filename)
+            if safe_name not in upload_list:
+                upload_list.append(safe_name)
+            saved_files.append(safe_name)
     return jsonify({"files": upload_list})
 
 
@@ -59,7 +75,7 @@ def get_upload_list():
 
 @app.route('/start_processing', methods=['POST'])
 def start_processing():
-    global upload_list, processing_list, processed_list
+    global upload_list, processing_list
     selected_files = request.json.get("files", [])
 
     # Move selected files to processing list
@@ -93,6 +109,7 @@ def process_files(files):
         input_path = Path(UPLOAD_FOLDER).resolve() / f
         output_ext = settings["codec"]
         output_name = Path(f).stem + f".{output_ext}"
+        output_name = clean_filename(output_name)
         output_path = Path(PROCESSED_FOLDER).resolve() / output_name
 
         try:
@@ -117,7 +134,6 @@ def process_files(files):
                     processed_list.append(output_name)
 
 
-
 @app.route('/processed_files')
 def get_processed_files():
     return jsonify({"files": processed_list})
@@ -125,7 +141,8 @@ def get_processed_files():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    return send_from_directory(PROCESSED_FOLDER, filename, as_attachment=True)
+    safe_name = clean_filename(filename)
+    return send_from_directory(PROCESSED_FOLDER, safe_name, as_attachment=True)
 
 
 if __name__ == "__main__":
