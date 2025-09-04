@@ -23,6 +23,15 @@ processed_list = []
 transcoder = Video2Audio(ffmpeg_bin="ffmpeg", ffprobe_bin="ffprobe")
 
 
+# Add these globals
+settings = {
+    "codec": "mp3",
+    "bitrate": None,
+    "samplerate": None,
+    "channels": None,
+}
+
+
 @app.route('/')
 def index():
     return render_template("index.html")
@@ -66,19 +75,35 @@ def start_processing():
     return jsonify({"processing": processing_list})
 
 
+@app.route('/settings', methods=['POST'])
+def update_settings():
+    """Update transcoding settings from UI"""
+    global settings
+    data = request.json
+    settings["codec"] = data.get("codec", "mp3")
+    settings["bitrate"] = data.get("bitrate") or None
+    settings["samplerate"] = int(data["samplerate"]) if data.get("samplerate") else None
+    settings["channels"] = int(data["channels"]) if data.get("channels") else None
+    return jsonify({"status": "ok", "settings": settings})
+
+
 def process_files(files):
-    global processing_list, processed_list
+    global processing_list, processed_list, settings
     for f in files:
         input_path = Path(UPLOAD_FOLDER).resolve() / f
-        output_name = Path(f).stem + ".mp3"
+        output_ext = settings["codec"]
+        output_name = Path(f).stem + f".{output_ext}"
         output_path = Path(PROCESSED_FOLDER).resolve() / output_name
 
         try:
-            print(f"🔄 Converting {input_path} → {output_path}")
+            print(f"🔄 Converting {input_path} → {output_path} with settings {settings}")
             transcoder.convert(
                 input_file=input_path,
                 output_file=output_path,
-                codec="mp3",
+                codec=settings["codec"],
+                bitrate=settings["bitrate"],
+                samplerate=settings["samplerate"],
+                channels=settings["channels"],
                 auto=True,
             )
             print(f"✅ Done: {output_path}")

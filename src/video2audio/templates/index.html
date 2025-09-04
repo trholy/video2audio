@@ -16,6 +16,43 @@ text-align:center; line-height:120px; font-size:18px; margin-bottom:20px; color:
 <div id="drop-zone">Drag & Drop or Click to Select Files</div>
 <input type="file" id="file-input" multiple style="display:none;">
 
+<h3>Transcoding Settings</h3>
+<div>
+    <label>Codec:</label>
+    <select id="codec">
+        <option value="mp3" selected>MP3</option>
+        <option value="aac">AAC</option>
+        <option value="flac">FLAC</option>
+        <option value="wav">WAV</option>
+    </select>
+
+    <label>Bitrate:</label>
+    <select id="bitrate">
+        <option value="">Auto</option>
+        <option value="128k">128k</option>
+        <option value="192k">192k</option>
+        <option value="256k">256k</option>
+        <option value="320k">320k</option>
+    </select>
+
+    <label>Sample Rate:</label>
+    <select id="samplerate">
+        <option value="">Auto</option>
+        <option value="44100">44.1 kHz</option>
+        <option value="48000">48 kHz</option>
+    </select>
+
+    <label>Channels:</label>
+    <select id="channels">
+        <option value="">Auto</option>
+        <option value="1">Mono</option>
+        <option value="2">Stereo</option>
+    </select>
+
+    <button onclick="applySettings()">Apply Settings</button>
+</div>
+<hr>
+
 <h3>Upload List</h3>
 <div class="list-container" id="upload-list"></div>
 <button onclick="startProcessing()">Start Processing Selected</button>
@@ -109,6 +146,25 @@ function downloadSelected() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+    });
+}
+
+
+function applySettings() {
+    const settings = {
+        codec: document.getElementById("codec").value,
+        bitrate: document.getElementById("bitrate").value,
+        samplerate: document.getElementById("samplerate").value,
+        channels: document.getElementById("channels").value
+    };
+    fetch("/settings", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(settings)
+    })
+    .then(res=>res.json())
+    .then(data=>{
+        alert("✅ Settings applied: " + JSON.stringify(data.settings));
     });
 }
 
