@@ -26,10 +26,7 @@ for folder in [UPLOAD_FOLDER, PROCESSING_FOLDER, PROCESSED_FOLDER]:
 # -------------------------------------------------------------------
 
 def clean_filename(filename: str) -> str:
-    """
-    Sanitize filenames for saving, processing, and downloading.
-    Keeps alphanumeric, dot, dash, underscore. Replaces others with '_'.
-    """
+    """Sanitize filenames for saving, processing, and downloading."""
     name, ext = os.path.splitext(filename)
     name = re.sub(r"[^a-zA-Z0-9._-]", "_", name)
     name = re.sub(r"_+", "_", name).strip("_")
@@ -65,7 +62,6 @@ class TranscodeManager:
     # Upload Management
     # -------------------------------
     def save_uploads(self, files) -> List[str]:
-        """Save uploaded files and update tracking list."""
         saved_files = []
         for f in files:
             if f.filename:
@@ -81,7 +77,6 @@ class TranscodeManager:
     # Processing Management
     # -------------------------------
     def start_processing(self, filenames: List[str]) -> None:
-        """Start processing selected files in a background thread."""
         for f in filenames:
             if f in self.upload_list:
                 self.upload_list.remove(f)
@@ -91,7 +86,6 @@ class TranscodeManager:
         thread.start()
 
     def _process_files(self, files: List[str]) -> None:
-        """Convert uploaded videos to audio in background."""
         for f in files:
             input_path = UPLOAD_FOLDER.resolve() / f
             output_ext = self.settings.codec
@@ -122,7 +116,6 @@ class TranscodeManager:
     # Settings Management
     # -------------------------------
     def update_settings(self, data: Dict) -> None:
-        """Update transcoding settings from request JSON."""
         self.settings.codec = data.get("codec", "mp3")
         self.settings.bitrate = data.get("bitrate") or None
         self.settings.samplerate = (
@@ -137,7 +130,6 @@ class TranscodeManager:
 # Flask App
 # -------------------------------------------------------------------
 
-# Determine project root relative to this file
 app = Flask(__name__)
 manager = TranscodeManager(Video2Audio(ffmpeg_bin="ffmpeg", ffprobe_bin="ffprobe"))
 
@@ -150,7 +142,7 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload():
     files = request.files.getlist("files[]")
-    saved_files = manager.save_uploads(files)
+    manager.save_uploads(files)
     return jsonify({"files": manager.upload_list})
 
 
@@ -183,5 +175,25 @@ def download_file(filename):
     return send_from_directory(PROCESSED_FOLDER, safe_name, as_attachment=True)
 
 
+@app.route('/clear_processed', methods=['POST'])
+def clear_processed():
+    """Delete all processed files from disk and update manager list."""
+    deleted_files = []
+
+    for f in manager.processed_list:
+        file_path = PROCESSED_FOLDER / f
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                deleted_files.append(f)
+            except Exception as e:
+                print(f"❌ Failed to delete {f}: {e}")
+
+    # Update manager processed list
+    manager.processed_list = [f for f in manager.processed_list if f not in deleted_files]
+
+    return jsonify({"status": "ok", "deleted": deleted_files, "files": manager.processed_list})
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0")
