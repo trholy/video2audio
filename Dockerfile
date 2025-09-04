@@ -1,29 +1,29 @@
-# Stage 1: Build
-FROM python:3.12-slim AS builder
-
-WORKDIR /app
-
-COPY . /app
-
-RUN pip install --prefix=/install --no-cache-dir .
-
-# Install FFmpeg in builder
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-
-# Stage 2: Final runtime
+# Use a small, official Python slim image
 FROM python:3.12-slim
 
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    FLASK_APP=video2audio.app \
+    FLASK_RUN_HOST=0.0.0.0 \
+    FLASK_RUN_PORT=5000
+
+# Set working directory
 WORKDIR /app
 
-# Copy only the installed Python packages
-COPY --from=builder /install /usr/local
+# Install system dependencies (FFmpeg, build tools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy app source
-COPY src/video2audio /app/video2audio
+# Copy the entire project
+COPY . /app
 
-# FFmpeg runtime (if needed)
-COPY --from=builder /usr/bin/ffmpeg /usr/bin/ffmpeg
-COPY --from=builder /usr/bin/ffprobe /usr/bin/ffprobe
+# Install your package in editable mode
+RUN pip install --no-cache-dir .
 
-ENV FLASK_APP=video2audio.app
-CMD ["flask", "run", "--host=0.0.0.0"]
+# Expose Flask port
+EXPOSE 5000
+
+# Default command to run the web app
+CMD ["flask", "run"]
