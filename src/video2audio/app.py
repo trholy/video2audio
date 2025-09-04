@@ -175,6 +175,26 @@ def download_file(filename):
     return send_from_directory(PROCESSED_FOLDER, safe_name, as_attachment=True)
 
 
+@app.route('/clear_uploads', methods=['POST'])
+def clear_uploads():
+    """Delete selected uploaded files (not processed) from disk and list."""
+    files_to_delete = request.json.get("files", [])
+    deleted_files = []
+
+    for f in files_to_delete:
+        file_path = UPLOAD_FOLDER / f
+        if file_path.exists():
+            try:
+                file_path.unlink()
+                deleted_files.append(f)
+                if f in manager.upload_list:
+                    manager.upload_list.remove(f)
+            except Exception as e:
+                print(f"❌ Failed to delete {f}: {e}")
+
+    return jsonify({"status": "ok", "deleted": deleted_files, "files": manager.upload_list})
+
+
 @app.route('/clear_processed', methods=['POST'])
 def clear_processed():
     """Delete all processed files from disk and update manager list."""

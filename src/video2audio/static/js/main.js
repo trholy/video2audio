@@ -209,6 +209,28 @@ function clearProcessed() {
         });
 }
 
+function clearUploads() {
+    const selected = Array.from(uploadListDiv.querySelectorAll("input:checked")).map(cb => cb.value);
+    if (!selected.length) return;
+
+    if (!confirm("⚠️ This will delete the selected uploaded files permanently. Continue?")) return;
+
+    fetch("/clear_uploads", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({files: selected})
+    })
+    .then(res => res.json())
+    .then(data => {
+        refreshUploadList();
+        showStatus(`✅ Deleted uploads: ${data.deleted.join(", ")}`, true);
+    })
+    .catch(err => {
+        console.error(err);
+        showStatus("❌ Failed to clear uploads", false);
+    });
+}
+
 // --------------------
 // Settings
 // --------------------
