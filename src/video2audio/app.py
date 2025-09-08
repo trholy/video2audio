@@ -131,7 +131,8 @@ class TranscodeManager:
 # -------------------------------------------------------------------
 
 app = Flask(__name__)
-manager = TranscodeManager(Video2Audio(ffmpeg_bin="ffmpeg", ffprobe_bin="ffprobe"))
+manager = TranscodeManager(
+    Video2Audio(ffmpeg_bin="ffmpeg", ffprobe_bin="ffprobe"))
 
 
 @app.route("/")
@@ -192,7 +193,11 @@ def clear_uploads():
             except Exception as e:
                 print(f"❌ Failed to delete {f}: {e}")
 
-    return jsonify({"status": "ok", "deleted": deleted_files, "files": manager.upload_list})
+    return jsonify(
+        {"status": "ok",
+         "deleted": deleted_files,
+         "files": manager.upload_list
+         })
 
 
 @app.route('/clear_processed', methods=['POST'])
@@ -210,9 +215,14 @@ def clear_processed():
                 print(f"❌ Failed to delete {f}: {e}")
 
     # Update manager processed list
-    manager.processed_list = [f for f in manager.processed_list if f not in deleted_files]
+    manager.processed_list = [
+        f for f in manager.processed_list if f not in deleted_files]
 
-    return jsonify({"status": "ok", "deleted": deleted_files, "files": manager.processed_list})
+    return jsonify(
+        {"status": "ok",
+         "deleted": deleted_files,
+         "files": manager.processed_list
+         })
 
 
 if __name__ == "__main__":
