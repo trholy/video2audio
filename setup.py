@@ -3,12 +3,12 @@ from setuptools import setup, find_packages
 setup(
     name="video2audio",
     version="0.1.0",
-    description="Convert videos to audio",
+    description="Convert video to audio with FFmpeg",
     author="Thomas R. Holy",
     python_requires=">=3.10",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    include_package_data=True,  # <- important
+    include_package_data=True,
     package_data={
         "video2audio": [
             "templates/*",    # include templates in package
