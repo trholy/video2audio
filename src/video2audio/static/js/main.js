@@ -19,7 +19,7 @@ function showStatus(msg, success = true, persistent = false) {
     statusDiv.style.display = "block";
 
     if (!persistent) {
-        setTimeout(() => statusDiv.style.display = "none", 8000);
+        setTimeout(() => (statusDiv.style.display = "none"), 8000);
     }
 }
 
@@ -30,12 +30,54 @@ function updateButtons() {
 }
 
 // --------------------
+// File List Rendering
+// --------------------
+function renderFileList(container, files, type, preserveChecked = true) {
+    // Remember which checkboxes were checked
+    const previouslyChecked = preserveChecked
+        ? new Set(Array.from(container.querySelectorAll("input:checked")).map(cb => cb.value))
+        : new Set();
+
+    container.innerHTML = "";
+    if (!files.length) {
+        container.innerHTML = `<em>No ${type} files</em>`;
+        return;
+    }
+
+    files.forEach(f => {
+        const div = document.createElement("div");
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = f;
+        checkbox.id = `${type}-${f}`;
+
+        if (previouslyChecked.has(f)) checkbox.checked = true;
+
+        checkbox.addEventListener("change", updateButtons);
+
+        const label = document.createElement("label");
+        label.htmlFor = `${type}-${f}`;
+        label.textContent = f;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        container.appendChild(div);
+    });
+
+    updateButtons();
+}
+
+// --------------------
 // Upload Handlers
 // --------------------
 dropZone.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => uploadFiles(fileInput.files));
 
-dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("hover"); });
+dropZone.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropZone.classList.add("hover");
+});
 dropZone.addEventListener("dragleave", () => dropZone.classList.remove("hover"));
 dropZone.addEventListener("drop", e => {
     e.preventDefault();
@@ -68,59 +110,13 @@ function uploadFiles(files) {
 function refreshUploadList() {
     fetch("/upload_list")
         .then(res => res.json())
-        .then(data => {
-            uploadListDiv.innerHTML = "";
-            if (!data.files.length) {
-                uploadListDiv.innerHTML = "<em>No uploaded files</em>";
-            } else {
-                data.files.forEach(f => {
-                    const div = document.createElement("div");
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = f;
-                    checkbox.id = "upload-" + f;
-                    checkbox.addEventListener("change", updateButtons);
-
-                    const label = document.createElement("label");
-                    label.htmlFor = "upload-" + f;
-                    label.textContent = f;
-
-                    div.appendChild(checkbox);
-                    div.appendChild(label);
-                    uploadListDiv.appendChild(div);
-                });
-            }
-            updateButtons();
-        });
+        .then(data => renderFileList(uploadListDiv, data.files, "upload"));
 }
 
 function refreshProcessedList() {
     fetch("/processed_files")
         .then(res => res.json())
-        .then(data => {
-            processedListDiv.innerHTML = "";
-            if (!data.files.length) {
-                processedListDiv.innerHTML = "<em>No processed files</em>";
-            } else {
-                data.files.forEach(f => {
-                    const div = document.createElement("div");
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = f;
-                    checkbox.id = "processed-" + f;
-                    checkbox.addEventListener("change", updateButtons);
-
-                    const label = document.createElement("label");
-                    label.htmlFor = "processed-" + f;
-                    label.textContent = f;
-
-                    div.appendChild(checkbox);
-                    div.appendChild(label);
-                    processedListDiv.appendChild(div);
-                });
-            }
-            updateButtons();
-        });
+        .then(data => renderFileList(processedListDiv, data.files, "processed"));
 }
 
 // --------------------
@@ -136,13 +132,15 @@ function startProcessing() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ files: selected })
-    }).then(() => {
-        refreshUploadList();
-        pollProcessingCompletion(selected);
-    }).catch(err => {
-        console.error(err);
-        showStatus("❌ Failed to start processing", false);
-    });
+    })
+        .then(() => {
+            refreshUploadList();
+            pollProcessingCompletion(selected);
+        })
+        .catch(err => {
+            console.error(err);
+            showStatus("❌ Failed to start processing", false);
+        });
 }
 
 function pollProcessingCompletion(files) {
@@ -171,21 +169,18 @@ function downloadSelected() {
 
     selected.forEach(f => {
         fetch("/download/" + encodeURIComponent(f))
-        .then(resp => resp.blob())
-        .then(blob => {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = f;
+            .then(resp => resp.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = f;
 
-            // Append and click, then immediately remove
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
-            // Release the object URL
-            URL.revokeObjectURL(url);
-        });
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
     });
 
     showStatus("✅ Download completed", true);
@@ -220,15 +215,15 @@ function clearUploads() {
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({files: selected})
     })
-    .then(res => res.json())
-    .then(data => {
-        refreshUploadList();
-        showStatus(`✅ Deleted uploads: ${data.deleted.join(", ")}`, true);
-    })
-    .catch(err => {
-        console.error(err);
-        showStatus("❌ Failed to clear uploads", false);
-    });
+        .then(res => res.json())
+        .then(data => {
+            refreshUploadList();
+            showStatus(`✅ Deleted uploads: ${data.deleted.join(", ")}`, true);
+        })
+        .catch(err => {
+            console.error(err);
+            showStatus("❌ Failed to clear uploads", false);
+        });
 }
 
 // --------------------
