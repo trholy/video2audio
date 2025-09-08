@@ -37,11 +37,16 @@ class Video2Audio:
     Provides smart defaults for bitrate, sample rate, and channels.
     """
 
-    def __init__(self, ffmpeg_bin: str = "ffmpeg.exe", ffprobe_bin: str = "ffprobe.exe"):
+    def __init__(
+            self,
+            ffmpeg_bin: str = "ffmpeg",
+            ffprobe_bin: str = "ffprobe"
+    ):
         self.ffmpeg_bin = ffmpeg_bin
         self.ffprobe_bin = ffprobe_bin
 
-    def _run_subprocess(self, cmd: list[str]) -> subprocess.CompletedProcess:
+    @staticmethod
+    def _run_subprocess(cmd: list[str]) -> subprocess.CompletedProcess:
         """Run a subprocess command and return the result."""
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
@@ -79,7 +84,8 @@ class Video2Audio:
             channels=int(stream.get("channels", 2)),
         )
 
-    def _determine_bitrate(self, codec: str, input_bitrate: int) -> Optional[str]:
+    @staticmethod
+    def _determine_bitrate(codec: str, input_bitrate: int) -> Optional[str]:
         """
         Determine an appropriate output bitrate based on codec and input.
 
@@ -170,7 +176,9 @@ class Video2Audio:
             channels = channels or audio_info.channels
 
         cmd = self._build_ffmpeg_command(
-            input_file, output_file, codec, bitrate, samplerate, channels, loudnorm, overwrite
+            input_file, output_file,
+            codec, bitrate, samplerate, channels, loudnorm,
+            overwrite
         )
 
         self._run_subprocess(cmd)
