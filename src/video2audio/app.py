@@ -4,9 +4,15 @@ import threading
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+import logging
+import urllib.parse
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file
 from video2audio.transcoder import Video2Audio
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # -------------------------------------------------------------------
@@ -35,6 +41,84 @@ def clean_filename(filename: str) -> str:
     return f"{name}{ext.lower()}"
 
 
+# -------------------------------------------------------------------
+# Codec Defaults and Validation
+# -------------------------------------------------------------------
+
+CODEC_DEFAULTS = {
+    "mp3": {"bitrate": "192k", "samplerate": 44100,
+            "channels": 2, "lossless": False},
+    "aac": {"bitrate": "256k", "samplerate": 44100,
+            "channels": 2, "lossless": False},
+    "wav": {"bitrate": None, "samplerate": 44100,
+            "channels": 2, "lossless": True},
+    "flac": {"bitrate": None, "samplerate": 44100,
+             "channels": 2, "lossless": True}
+}
+
+VALID_SAMPLE_RATES = {
+    "mp3": [32000, 44100, 48000],
+    "aac": [44100, 48000],
+    "wav": [44100, 48000, 88200, 96000, 192000],
+    "flac": [44100, 48000, 88200, 96000, 192000],
+}
+
+
+def validate_settings(
+        codec: str,
+        bitrate: Optional[str],
+        samplerate: Optional[int],
+        channels: Optional[int]
+) -> Dict:
+    """Validate and adjust settings based on codec rules."""
+    codec = codec.lower()
+    if codec not in CODEC_DEFAULTS:
+        codec = "mp3"
+
+    defaults = CODEC_DEFAULTS[codec]
+    lossless = defaults["lossless"]
+
+    # Bitrate
+    if lossless:
+        bitrate = None
+    elif bitrate:
+        try:
+            kbps = int(bitrate.replace("k", ""))
+            if codec == "mp3":
+                kbps = min(max(kbps, 32), 320)
+            elif codec == "aac":
+                kbps = min(max(kbps, 64), 256)
+            bitrate = f"{kbps}k"
+        except Exception:
+            bitrate = defaults["bitrate"]
+    else:
+        bitrate = defaults["bitrate"]
+
+    # Sample rate
+    if samplerate not in VALID_SAMPLE_RATES.get(codec, []):
+        samplerate = defaults["samplerate"]
+
+    # Channels
+    if codec in ["mp3", "aac"]:
+        if channels not in [1, 2]:
+            channels = 2
+    else:
+        if not channels:
+            channels = defaults["channels"]
+
+    return {
+        "codec": codec,
+        "bitrate": bitrate,
+        "samplerate": samplerate,
+        "channels": channels,
+        "lossless": lossless,
+    }
+
+
+# -------------------------------------------------------------------
+# Dataclasses
+# -------------------------------------------------------------------
+
 @dataclass
 class TranscodeSettings:
     """Holds user-selected transcoding options."""
@@ -42,6 +126,7 @@ class TranscodeSettings:
     bitrate: Optional[str] = None
     samplerate: Optional[int] = None
     channels: Optional[int] = None
+    lossless: bool = False
 
 
 # -------------------------------------------------------------------
@@ -93,19 +178,25 @@ class TranscodeManager:
             output_path = PROCESSED_FOLDER.resolve() / output_name
 
             try:
-                print(f"🔄 Converting {input_path} → {output_path} with {self.settings}")
+                logger.info(
+                    f"🔄 Converting {input_path} → {output_path}"
+                    f" with {self.settings}")
+
+                # Skip bitrate if lossless
+                bitrate = None if self.settings.lossless else self.settings.bitrate
+
                 self.transcoder.convert(
                     input_file=input_path,
                     output_file=output_path,
                     codec=self.settings.codec,
-                    bitrate=self.settings.bitrate,
+                    bitrate=bitrate,
                     samplerate=self.settings.samplerate,
                     channels=self.settings.channels,
                     auto=True,
                 )
-                print(f"✅ Done: {output_path}")
+                logger.info(f"✅ Done: {output_path}")
             except Exception as e:
-                print(f"❌ Error converting {f}: {e}")
+                logger.error(f"❌ Error converting {f}: {e}")
             finally:
                 if f in self.processing_list:
                     self.processing_list.remove(f)
@@ -116,14 +207,14 @@ class TranscodeManager:
     # Settings Management
     # -------------------------------
     def update_settings(self, data: Dict) -> None:
-        self.settings.codec = data.get("codec", "mp3")
-        self.settings.bitrate = data.get("bitrate") or None
-        self.settings.samplerate = (
-            int(data["samplerate"]) if data.get("samplerate") else None
+        validated = validate_settings(
+            codec=data.get("codec", "mp3"),
+            bitrate=data.get("bitrate"),
+            samplerate=int(data["samplerate"]) if data.get("samplerate") else None,
+            channels=int(data["channels"]) if data.get("channels") else None,
         )
-        self.settings.channels = (
-            int(data["channels"]) if data.get("channels") else None
-        )
+        self.settings = TranscodeSettings(**validated)
+        logger.info(f"⚙️ Updated transcoding settings: {self.settings}")
 
 
 # -------------------------------------------------------------------
@@ -169,12 +260,34 @@ def update_settings():
 def get_processed_files():
     return jsonify({"files": manager.processed_list})
 
-
-@app.route("/download/<filename>")
+@app.route("/download/<path:filename>")
 def download_file(filename):
-    safe_name = clean_filename(filename)
-    return send_from_directory(PROCESSED_FOLDER, safe_name, as_attachment=True)
+    """
+    Securely serve processed audio files for download.
+    Returns a valid file or a JSON error message if not found or inaccessible.
+    """
+    safe_name = urllib.parse.unquote(filename)
+    file_path = (PROCESSED_FOLDER / safe_name).resolve()
 
+    # Safety: ensure file stays inside processed folder
+    if not str(file_path).startswith(str(PROCESSED_FOLDER.resolve())):
+        logging.warning(
+            f"⚠️ Security check failed: {file_path} outside processed folder")
+        return jsonify({"error": "Invalid file path"}), 400
+
+    if not file_path.exists():
+        logging.error(f"❌ File not found: {file_path}")
+        return jsonify({"error": f"File not found: {safe_name}"}), 404
+
+    try:
+        logging.info(f"⬇️ Downloading: {safe_name}")
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=safe_name)
+    except Exception as e:
+        logging.exception(f"❌ Failed to send {safe_name}: {e}")
+        return jsonify({"error": f"Failed to download {safe_name}"}), 500
 
 @app.route('/clear_uploads', methods=['POST'])
 def clear_uploads():
@@ -191,7 +304,7 @@ def clear_uploads():
                 if f in manager.upload_list:
                     manager.upload_list.remove(f)
             except Exception as e:
-                print(f"❌ Failed to delete {f}: {e}")
+                logger.error(f"❌ Failed to delete {f}: {e}")
 
     return jsonify(
         {"status": "ok",
@@ -212,7 +325,7 @@ def clear_processed():
                 file_path.unlink()
                 deleted_files.append(f)
             except Exception as e:
-                print(f"❌ Failed to delete {f}: {e}")
+                logger.error(f"❌ Failed to delete {f}: {e}")
 
     # Update manager processed list
     manager.processed_list = [

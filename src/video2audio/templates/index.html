@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Video to Audio Transcoder</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+    .settings-panel select, .settings-panel button {
+        margin: 4px 0;
+        padding: 6px;
+    }
+    .status {
+        margin-top: 6px;
+        font-size: 0.9em;
+        color: #333;
+    }
+</style>
 </head>
 <body>
 <div class="container">
@@ -16,7 +27,7 @@
     <h3>⚙️ Transcoding Settings</h3>
     <div class="settings-panel">
         <label>Codec:</label>
-        <select id="codec">
+        <select id="codec" onchange="updateCodecOptions()">
             <option value="mp3" selected>MP3</option>
             <option value="aac">AAC</option>
             <option value="flac">FLAC</option>
@@ -25,25 +36,17 @@
 
         <label>Bitrate:</label>
         <select id="bitrate">
-            <option value="">Auto</option>
-            <option value="128k">128k</option>
-            <option value="192k">192k</option>
-            <option value="256k">256k</option>
-            <option value="320k">320k</option>
+            <!-- dynamically filled -->
         </select>
 
         <label>Sample Rate:</label>
         <select id="samplerate">
-            <option value="">Auto</option>
-            <option value="44100">44.1 kHz</option>
-            <option value="48000">48 kHz</option>
+            <!-- dynamically filled -->
         </select>
 
         <label>Channels:</label>
         <select id="channels">
-            <option value="">Auto</option>
-            <option value="1">Mono</option>
-            <option value="2">Stereo</option>
+            <!-- dynamically filled -->
         </select>
 
         <button onclick="applySettings()">Apply Settings</button>
@@ -61,6 +64,96 @@
     <button id="download-btn" onclick="downloadSelected()" disabled>Download Selected</button>
     <button onclick="clearProcessed()">Clear Processed Files</button>
 </div>
+
+<script>
+/* ---------------------------------------------
+   Codec-specific options synced with app.py
+--------------------------------------------- */
+
+const codecSettings = {
+    mp3: {
+        bitrates: ["128k", "192k", "256k", "320k"],
+        samplerates: [32000, 44100, 48000],
+        channels: [1, 2],
+    },
+    aac: {
+        bitrates: ["64k", "128k", "192k", "256k"],
+        samplerates: [44100, 48000],
+        channels: [1, 2],
+    },
+    wav: {
+        bitrates: [], // lossless
+        samplerates: [44100, 48000, 88200, 96000, 192000],
+        channels: [1, 2, 4, 6, 8],
+    },
+    flac: {
+        bitrates: [], // lossless
+        samplerates: [44100, 48000, 88200, 96000, 192000],
+        channels: [1, 2, 4, 6, 8],
+    }
+};
+
+/* Initialize codec options */
+function populateSelect(id, options, includeAuto=true) {
+    const select = document.getElementById(id);
+    select.innerHTML = "";
+    if (includeAuto) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Auto";
+        select.appendChild(opt);
+    }
+    for (const val of options) {
+        const opt = document.createElement("option");
+        opt.value = val;
+        if (id === "samplerate")
+            opt.textContent = `${(val/1000).toFixed(1)} kHz`;
+        else if (id === "channels")
+            opt.textContent = val === 1 ? "Mono" : (val === 2 ? "Stereo" : `${val}-Ch`);
+        else
+            opt.textContent = val;
+        select.appendChild(opt);
+    }
+}
+
+function updateCodecOptions() {
+    const codec = document.getElementById("codec").value;
+    const cfg = codecSettings[codec];
+
+    // Bitrate: disable for lossless codecs
+    const bitrateSelect = document.getElementById("bitrate");
+    populateSelect("bitrate", cfg.bitrates, true);
+    bitrateSelect.disabled = cfg.bitrates.length === 0;
+
+    populateSelect("samplerate", cfg.samplerates, true);
+    populateSelect("channels", cfg.channels, true);
+}
+
+function applySettings() {
+    const data = {
+        codec: document.getElementById("codec").value,
+        bitrate: document.getElementById("bitrate").value,
+        samplerate: document.getElementById("samplerate").value,
+        channels: document.getElementById("channels").value,
+    };
+
+    fetch("/settings", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        document.getElementById("status").textContent =
+            "Settings applied: " + JSON.stringify(res.settings);
+    });
+}
+
+/* Initialize on load */
+document.addEventListener("DOMContentLoaded", () => {
+    updateCodecOptions();
+});
+</script>
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
