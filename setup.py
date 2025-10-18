@@ -3,7 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name="video2audio",
     version="0.1.0",
-    description="Convert video to audio with FFmpeg",
+    description="Video2Audio Transcoder - Convert video to audio with FFmpeg!",
+    long_description=open('README.md', encoding='utf-8').read(),
     author="Thomas R. Holy",
     python_requires=">=3.10",
     package_dir={"": "src"},
