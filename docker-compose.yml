@@ -1,0 +1,10 @@
+services:
+  video2audio:
+    build: .
+    container_name: video2audio
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./processed:/app/processed
+      - ./processing:/app/processing
+      - ./uploads:/app/uploads
