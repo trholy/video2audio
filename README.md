@@ -15,7 +15,7 @@ A simple web application to **convert video files to audio** in various formats 
 
 ---
 
-## Demo
+## Web UI
 
 ![](img/app_screenshot.png)
 
