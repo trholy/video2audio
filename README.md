@@ -49,7 +49,7 @@ docker compose up --build
 
 ---
 
-## Folder Structure
+## Project Structure
 
 ```
 video2audio/
