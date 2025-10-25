@@ -8,6 +8,7 @@ setup(
     long_description=open('README.md', encoding='utf-8').read(),
     author="Thomas R. Holy",
     python_requires=">=3.10",
+    license_files=('LICENSE',),
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     include_package_data=True,
